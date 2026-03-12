@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - develop
+      - 'feature/**'
     paths:
       - 'Frontend/**'
       - '.github/workflows/frontend-build.yml'
@@ -13,6 +13,7 @@ on:
       - main
     paths:
       - 'Frontend/**'
+      - '.github/workflows/frontend-build.yml'
   workflow_dispatch:
 
 env:
