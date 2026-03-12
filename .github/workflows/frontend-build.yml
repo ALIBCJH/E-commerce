@@ -1,0 +1,81 @@
+name: Build and Push Frontend Container
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'Frontend/**'
+      - '.github/workflows/frontend-build.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Frontend/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: ecommerce-frontend
+  IMAGE_TAG: ${{ github.sha }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    name: Build and Push Frontend Image
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}  # Set this as a GitHub repository variable
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Frontend
+          file: ./Frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Image digest
+        run: |
+          echo "Image pushed with tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+          
+      - name: Update deployment info
+        run: |
+          echo "Frontend image built and pushed successfully"
+          echo "Repository: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+          echo "Tag: ${{ env.IMAGE_TAG }}"

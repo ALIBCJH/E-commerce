@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./E-commerce-Backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - ./E-commerce-Backend/.env
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - ecommerce-network
+    restart: unless-stopped
+
+networks:
+  ecommerce-network:
+    driver: bridge
