@@ -65,5 +65,5 @@ variable "db_instance_count" {
 variable "github_repo" {
   description = "GitHub repository in format: owner/repo-name (e.g., username/e-commerce)"
   type        = string
-  default     = "*/*" # Change this to your specific repo for better security
+  default     = "ALIBCJH/E-commerce"
 }

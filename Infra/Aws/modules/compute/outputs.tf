@@ -29,8 +29,18 @@ output "backend_instance_private_ip" {
 }
 
 output "github_actions_role_arn" {
-  description = "ARN of the IAM role for GitHub Actions"
+  description = "ARN of the IAM role for GitHub Actions build/deploy operations"
   value       = aws_iam_role.github_actions_ssm_role.arn
+}
+
+output "github_actions_deploy_role_arn" {
+  description = "ARN of the IAM role for GitHub Actions build/deploy operations"
+  value       = aws_iam_role.github_actions_ssm_role.arn
+}
+
+output "github_actions_terraform_role_arn" {
+  description = "ARN of the IAM role for GitHub Actions Terraform operations"
+  value       = aws_iam_role.github_actions_terraform_role.arn
 }
 
 output "ec2_instance_profile_arn" {

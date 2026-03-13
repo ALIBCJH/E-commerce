@@ -16,7 +16,7 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: ecommerce-frontend
-  INSTANCE_ID: # Will be fetched from tags
+  DEFAULT_AWS_DEPLOY_ROLE_ARN: arn:aws:iam::457713535842:role/ecommerce-github-actions-ssm-role
 
 permissions:
   id-token: write
@@ -32,11 +32,40 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Resolve AWS role ARN
+        id: aws-role
+        run: |
+          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
+          fi
+
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
+            echo "::error::Set AWS_DEPLOY_ROLE_ARN to terraform output -raw github_actions_deploy_role_arn"
+            exit 1
+          fi
+
+          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
+            exit 1
+          fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}  # Set this as a GitHub repository variable
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify OIDC role assumption
+        run: |
+          ASSUMED_ARN=$(aws sts get-caller-identity --query 'Arn' --output text)
+          echo "::notice::Authenticated to AWS as ${ASSUMED_ARN}"
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -60,6 +89,7 @@ jobs:
             --instance-id ${{ steps.get-instance.outputs.instance_id }}
 
       - name: Deploy Container via SSM
+        id: deploy-ssm
         run: |
           IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
           ECR_REGISTRY="${{ steps.login-ecr.outputs.registry }}"
@@ -87,20 +117,20 @@ jobs:
             --query 'Command.CommandId')
           
           echo "Command ID: $COMMAND_ID"
-          echo "command_id=$COMMAND_ID" >> $GITHUB_ENV
+          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
 
       - name: Wait for deployment
         run: |
           echo "Waiting for deployment command to complete..."
           aws ssm wait command-executed \
-            --command-id ${{ env.command_id }} \
+            --command-id ${{ steps.deploy-ssm.outputs.command_id }} \
             --instance-id ${{ steps.get-instance.outputs.instance_id }} \
             --timeout 300 || true
 
       - name: Get deployment status
         run: |
           OUTPUT=$(aws ssm get-command-invocation \
-            --command-id ${{ env.command_id }} \
+            --command-id ${{ steps.deploy-ssm.outputs.command_id }} \
             --instance-id ${{ steps.get-instance.outputs.instance_id }} \
             --query '[Status,StandardOutputContent,StandardErrorContent]' \
             --output text)

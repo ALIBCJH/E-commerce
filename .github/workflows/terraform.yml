@@ -1,0 +1,354 @@
+name: Terraform Infrastructure
+
+on:
+  create:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'terraform/**'
+      - '*.tf'
+      - '**/*.tf'
+      - 'Infra/Aws/**'
+      - '.github/workflows/terraform.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action (plan/apply/destroy)'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+env:
+  AWS_REGION: us-east-1
+  TERRAFORM_VERSION: 1.5.0
+  WORKING_DIR: ./Infra/Aws
+  DEFAULT_AWS_TERRAFORM_ROLE_ARN: arn:aws:iam::457713535842:role/ecommerce-github-actions-terraform-role
+  DEFAULT_AWS_DEPLOY_ROLE_ARN: arn:aws:iam::457713535842:role/ecommerce-github-actions-ssm-role
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write  # For commenting on PRs
+
+jobs:
+  branch-bootstrap:
+    name: Branch Bootstrap Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'create' && github.event.ref_type == 'branch'
+    steps:
+      - name: Branch bootstrap notice
+        run: |
+          echo "First-time branch event detected for ${{ github.event.ref }}"
+          echo "Terraform init/plan are skipped on create events to optimize runner minutes."
+
+  terraform-checks:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Validate AWS role repository variable
+        run: |
+          if [ -z "${{ vars.AWS_TERRAFORM_ROLE_ARN }}" ] && [ -z "${{ secrets.AWS_TERRAFORM_ROLE_ARN }}" ]; then
+            echo "::warning::AWS_TERRAFORM_ROLE_ARN is not set in repository variables/secrets"
+            echo "::warning::Terraform workflow will use fallback role ARN: ${{ env.DEFAULT_AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+
+      - name: Resolve AWS role ARN
+        id: aws-role
+        run: |
+          ROLE_ARN="${{ vars.AWS_TERRAFORM_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ env.DEFAULT_AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::warning::Falling back to deploy role during Terraform role transition"
+            ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
+          fi
+
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::error::Missing AWS_TERRAFORM_ROLE_ARN and AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
+            exit 1
+          fi
+
+          if echo "$ROLE_ARN" | grep -q "github-actions-ssm-role"; then
+            echo "::error::Terraform workflow is using the deploy role: $ROLE_ARN"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
+            exit 1
+          fi
+
+          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
+            exit 1
+          fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify OIDC role assumption
+        run: aws sts get-caller-identity
+
+      - name: Terraform Init
+        id: init
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          terraform plan -no-color -input=false -detailed-exitcode || EXIT_CODE=$?
+          if [ "${EXIT_CODE}" == "2" ]; then
+            echo "Terraform plan detected changes (exit code 2)"
+            exit 0
+          elif [ "${EXIT_CODE}" != "0" ] && [ "${EXIT_CODE}" != "" ]; then
+            echo "Terraform plan failed with exit code ${EXIT_CODE}"
+            exit ${EXIT_CODE}
+          fi
+
+      - name: Comment PR with Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            <details><summary>Validation Output</summary>
+
+            \`\`\`
+            ${{ steps.validate.outputs.stdout }}
+            \`\`\`
+
+            </details>
+
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+            
+            <details><summary>Show Plan</summary>
+            
+            \`\`\`terraform
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            
+            </details>
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.WORKING_DIR }}\`, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: terraform-checks
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Resolve AWS role ARN
+        id: aws-role
+        run: |
+          ROLE_ARN="${{ vars.AWS_TERRAFORM_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ env.DEFAULT_AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::warning::Falling back to deploy role during Terraform role transition"
+            ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
+          fi
+
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::error::Missing AWS_TERRAFORM_ROLE_ARN and AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
+            exit 1
+          fi
+
+          if echo "$ROLE_ARN" | grep -q "github-actions-ssm-role"; then
+            echo "::error::Terraform apply cannot use deploy role: $ROLE_ARN"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
+            exit 1
+          fi
+
+          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
+            exit 1
+          fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify OIDC role assumption
+        run: aws sts get-caller-identity
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false
+
+      - name: Output Infrastructure Info
+        run: |
+          echo "::notice::Terraform infrastructure updated successfully"
+          TERRAFORM_ROLE_ARN=$(terraform output -raw github_actions_terraform_role_arn)
+          DEPLOY_ROLE_ARN=$(terraform output -raw github_actions_deploy_role_arn)
+          echo "::notice::Set repository variable AWS_TERRAFORM_ROLE_ARN to: ${TERRAFORM_ROLE_ARN}"
+          echo "::notice::Set repository variable AWS_DEPLOY_ROLE_ARN to: ${DEPLOY_ROLE_ARN}"
+          terraform output -json > terraform-outputs.json
+          
+      - name: Upload Terraform Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ env.WORKING_DIR }}/terraform-outputs.json
+          retention-days: 30
+
+  terraform-manual:
+    name: Manual Terraform Action
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment:
+      name: production
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Resolve AWS role ARN
+        id: aws-role
+        run: |
+          ROLE_ARN="${{ vars.AWS_TERRAFORM_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ env.DEFAULT_AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::warning::Falling back to deploy role during Terraform role transition"
+            ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
+          fi
+
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::error::Missing AWS_TERRAFORM_ROLE_ARN and AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
+            exit 1
+          fi
+
+          if echo "$ROLE_ARN" | grep -q "github-actions-ssm-role"; then
+            echo "::error::Manual Terraform action cannot use deploy role: $ROLE_ARN"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
+            exit 1
+          fi
+
+          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
+            exit 1
+          fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify OIDC role assumption
+        run: aws sts get-caller-identity
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform ${{ github.event.inputs.action }}
+        run: |
+          if [ "${{ github.event.inputs.action }}" == "plan" ]; then
+            terraform plan -input=false
+          elif [ "${{ github.event.inputs.action }}" == "apply" ]; then
+            terraform apply -auto-approve -input=false
+          elif [ "${{ github.event.inputs.action }}" == "destroy" ]; then
+            terraform destroy -auto-approve -input=false
+          fi

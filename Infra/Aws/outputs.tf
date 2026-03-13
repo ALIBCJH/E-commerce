@@ -61,8 +61,18 @@ output "backend_instance_id" {
 }
 
 output "github_actions_role_arn" {
-  description = "IAM Role ARN for GitHub Actions (use this in your GitHub secrets)"
+  description = "IAM Role ARN for GitHub Actions build/deploy operations"
   value       = module.compute.github_actions_role_arn
+}
+
+output "github_actions_deploy_role_arn" {
+  description = "IAM Role ARN for GitHub Actions build/deploy operations"
+  value       = module.compute.github_actions_deploy_role_arn
+}
+
+output "github_actions_terraform_role_arn" {
+  description = "IAM Role ARN for GitHub Actions Terraform operations"
+  value       = module.compute.github_actions_terraform_role_arn
 }
 
 output "ssm_connection_instructions" {
