@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTheme } from "../context/ThemeContext"; 
+import { useTheme } from "../context/ThemeContext";
+import { API_URL } from "../api/config"; 
 
 const AdminLogin = ({ onLogin }) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -23,7 +24,7 @@ const AdminLogin = ({ onLogin }) => {
 
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:5000/api/admin/login", {
+      const response = await fetch(`${API_URL}/api/admin/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

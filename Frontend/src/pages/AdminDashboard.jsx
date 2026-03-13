@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { FaPlus, FaTrash, FaArrowLeft } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
+import { API_URL } from "../api/config";
 
 const AdminDashboard = () => {
   const [products, setProducts] = useState([]);
@@ -12,7 +13,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/products");
+        const res = await fetch(`${API_URL}/api/products`);
         const data = await res.json();
 
         if (data.success) {
@@ -46,7 +47,7 @@ const AdminDashboard = () => {
     setIsDeleting(true);
     try {
       const res = await fetch(
-        `http://localhost:5000/api/products/${deleteProductId}`,
+        `${API_URL}/api/products/${deleteProductId}`,
         { method: "DELETE" }
       );
 

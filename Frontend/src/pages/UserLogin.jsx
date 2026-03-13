@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useTheme } from "../context/ThemeContext";
+import { API_URL } from "../api/config";
 
 const UserLogin = () => {
   const [form, setForm] = useState({ email: "", password: "" });
@@ -28,7 +29,7 @@ const UserLogin = () => {
 
     try {
       const res = await axios.post(
-        "http://localhost:5000/api/users/login",
+        `${API_URL}/api/users/login`,
         form
       );
       localStorage.setItem("userToken", res.data.token);

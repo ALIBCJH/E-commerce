@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useTheme } from "../context/ThemeContext"; // Make sure this exists if using dark mode
+import { useTheme } from "../context/ThemeContext";
+import { API_URL } from "../api/config";
 
 const UserSignup = () => {
   const [formData, setFormData] = useState({
@@ -39,7 +40,7 @@ const UserSignup = () => {
     setLoading(true);
 
     try {
-      await axios.post("http://localhost:5000/api/users/signup", {
+      await axios.post(`${API_URL}/api/users/signup`, {
         name,
         email,
         password,
