@@ -20,6 +20,7 @@ env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: ecommerce-frontend
   IMAGE_TAG: ${{ github.sha }}
+  DEFAULT_AWS_DEPLOY_ROLE_ARN: arn:aws:iam::457713535842:role/ecommerce-github-actions-ssm-role
 
 permissions:
   id-token: write
@@ -70,9 +71,12 @@ jobs:
           if [ -z "$ROLE_ARN" ]; then
             ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
           fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
+          fi
 
           if [ -z "$ROLE_ARN" ]; then
-            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets"
+            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
             echo "::error::Run terraform apply in Infra/Aws and set AWS_DEPLOY_ROLE_ARN"
             exit 1
           fi
