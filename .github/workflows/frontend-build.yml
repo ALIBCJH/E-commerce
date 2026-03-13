@@ -37,11 +37,29 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Validate AWS role from Terraform output
+        run: |
+          if [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ]; then
+            echo "::error::Missing repository variable AWS_DEPLOY_ROLE_ARN"
+            echo "::error::Run terraform apply in Infra/Aws and set AWS_DEPLOY_ROLE_ARN to terraform output -raw github_actions_role_arn"
+            exit 1
+          fi
+
+          if ! echo "${{ vars.AWS_DEPLOY_ROLE_ARN }}" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: ${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+            exit 1
+          fi
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}  # Set this as a GitHub repository variable
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify OIDC role assumption
+        run: |
+          ASSUMED_ARN=$(aws sts get-caller-identity --query 'Arn' --output text)
+          echo "::notice::Authenticated to AWS as ${ASSUMED_ARN}"
 
       - name: Login to Amazon ECR
         id: login-ecr
