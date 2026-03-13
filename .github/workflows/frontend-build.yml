@@ -93,7 +93,7 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
           build-args: |
-            VITE_API_URL=http://BACKEND_ALB_DNS_HERE/api
+            VITE_API_URL=http://ecommerce-alb-2137915898.us-east-1.elb.amazonaws.com/api
 
       - name: Image digest
         run: |
