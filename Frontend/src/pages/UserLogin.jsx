@@ -1,7 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useTheme } from "../context/ThemeContext";
@@ -48,10 +47,7 @@ const UserLogin = () => {
         darkMode ? "bg-gray-900 text-white" : "bg-gray-100 text-black"
       }`}
     >
-      <motion.div
-        initial={{ y: 50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5 }}
+      <div
         className={`w-full max-w-md rounded-2xl p-8 shadow-xl border ${
           darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
         }`}
@@ -130,7 +126,7 @@ const UserLogin = () => {
             </span>
           </p>
         </form>
-      </motion.div>
+      </div>
     </div>
   );
 };
