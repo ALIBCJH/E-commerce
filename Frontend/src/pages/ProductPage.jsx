@@ -4,7 +4,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { useTheme } from "../context/ThemeContext";
 import { FaArrowLeft, FaShoppingCart, FaMobileAlt } from "react-icons/fa";
-import { motion } from "framer-motion";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { API_URL } from "../api/config";  // ✅ import API_URL
@@ -57,7 +56,8 @@ const ProductPage = () => {
           `❌ STK Push failed: ${data.details?.errorMessage || data.error}`
         );
       }
-    } catch (err) {
+    } catch (error) {
+      console.error("M-Pesa error:", error);
       toast.error("⚠️ Network error or server down");
     }
   };
@@ -97,14 +97,8 @@ const ProductPage = () => {
           Back to Products
         </button>
 
-        <motion.div
-          className="grid md:grid-cols-2 gap-10 items-start"
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <motion.div
-            whileHover={{ scale: 1.03 }}
+        <div className="grid md:grid-cols-2 gap-10 items-start">
+          <div
             className={`rounded-3xl overflow-hidden shadow-lg ${
               darkMode
                 ? "bg-gray-800 hover:shadow-teal-600"
@@ -117,7 +111,7 @@ const ProductPage = () => {
               className="object-contain w-full h-[400px] p-8"
               loading="lazy"
             />
-          </motion.div>
+          </div>
 
           {/* Content */}
           <div className="flex flex-col gap-6">
@@ -143,27 +137,25 @@ const ProductPage = () => {
               </p>
 
               <div className="flex flex-wrap items-center gap-4">
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
+                <button
                   onClick={handleMpesaPay}
                   className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-full"
                 >
                   <FaMobileAlt />
                   Pay with M-Pesa
-                </motion.button>
+                </button>
 
-                <motion.button
-                  whileTap={{ scale: 0.97 }}
+                <button
                   onClick={() => addToCart(product)}
                   className="flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white font-semibold px-6 py-3 rounded-full"
                 >
                   <FaShoppingCart />
                   Add to Cart
-                </motion.button>
+                </button>
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );

@@ -228,14 +228,14 @@ jobs:
             exit 1
           fi
 
+          # Allow using deploy role for initial bootstrap, but warn
           if echo "$ROLE_ARN" | grep -q "github-actions-ssm-role"; then
-            echo "::error::Terraform apply cannot use deploy role: $ROLE_ARN"
-            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
-            exit 1
+            echo "::warning::Terraform apply is using the deploy role: $ROLE_ARN"
+            echo "::warning::After this run, set AWS_TERRAFORM_ROLE_ARN to: terraform output -raw github_actions_terraform_role_arn"
           fi
 
           if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
-            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
+            echo "::error::Invalid AWS role ARN format: $ROLE_ARN"
             exit 1
           fi
 

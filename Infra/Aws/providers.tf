@@ -8,17 +8,14 @@ terraform {
     }
   }
 
-  # TEMPORARILY DISABLED - Will re-enable after fixing state
-  # Backend configuration for S3 remote state
-  /*
+  # Backend configuration for S3 remote state (without locking)
+  # WARNING: No state locking - ensure only one terraform operation runs at a time
   backend "s3" {
-    bucket       = "ecommerce-terraform-state-bucket"
-    key          = "prod/terraform.tfstate"
-    region       = "us-east-1"
-    encrypt      = true
-    use_lockfile = true  # 2026 standard: native S3 locking
+    bucket  = "ecommerce-tf-state-457713535842"
+    key     = "prod/terraform.tfstate"
+    region  = "us-east-1"
+    encrypt = true
   }
-  */
 }
 
 provider "aws" {

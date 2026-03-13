@@ -1,6 +1,5 @@
 # S3 Backend Setup Resources
-# With 2026 S3 native locking (use_lockfile = true), DynamoDB is no longer needed!
-# This file creates the S3 bucket for remote state storage only
+# Creates S3 bucket and DynamoDB table for Terraform state management
 
 # Get current AWS account ID for unique bucket naming
 data "aws_caller_identity" "current" {}
@@ -55,17 +54,17 @@ output "s3_bucket_name" {
 output "backend_config" {
   description = "Backend configuration instructions"
   value       = <<-EOT
-    ✅ 2026 Standard: S3 native locking enabled (no DynamoDB needed)
+    S3 Backend Configuration (without locking):
     
-    Your backend is already configured in providers.tf with:
-    - bucket: ${aws_s3_bucket.terraform_state.id}
-    - key: prod/terraform.tfstate
-    - region: ${var.aws_region}
-    - encrypt: true
-    - use_lockfile: true  # New 2026 native S3 locking!
+    Bucket: ${aws_s3_bucket.terraform_state.id}
     
-    The S3 bucket has been created. To start using remote state:
+    The S3 bucket has been created.
+    Backend is already configured in providers.tf.
+    
+    To migrate your local state to S3:
     1. Run: terraform init -migrate-state
     2. Confirm the migration when prompted
+    
+    WARNING: State locking is disabled. Only run Terraform from one location at a time.
   EOT
 }

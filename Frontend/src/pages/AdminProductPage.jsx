@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FaArrowLeft } from "react-icons/fa";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { API_URL } from "../api/config";
 
 const categories = [
   "Clothes",
@@ -70,7 +71,7 @@ const AdminProductPage = () => {
         category,
       };
 
-      const res = await fetch("http://localhost:5000/api/products", {
+      const res = await fetch(`${API_URL}/api/products`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -15,7 +15,8 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: ecommerce-backend
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/ecommerce-backend
   DEFAULT_AWS_DEPLOY_ROLE_ARN: arn:aws:iam::457713535842:role/ecommerce-github-actions-ssm-role
 
 permissions:
@@ -75,10 +76,6 @@ jobs:
           ASSUMED_ARN=$(aws sts get-caller-identity --query 'Arn' --output text)
           echo "::notice::Authenticated to AWS as ${ASSUMED_ARN}"
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
       - name: Get Backend Instance ID
         id: get-instance
         run: |
@@ -100,8 +97,7 @@ jobs:
         id: deploy-ssm
         run: |
           IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
-          ECR_REGISTRY="${{ steps.login-ecr.outputs.registry }}"
-          IMAGE_URI="${ECR_REGISTRY}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}"
+          IMAGE_URI="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
           
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.get-instance.outputs.instance_id }}" \
@@ -109,8 +105,8 @@ jobs:
             --comment "Deploy backend container" \
             --parameters commands="[
               'set -e',
-              'echo \"Logging into ECR...\"',
-              'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${ECR_REGISTRY}',
+              'echo \"Logging into GHCR...\"',
+              'echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin',
               'echo \"Pulling image: ${IMAGE_URI}\"',
               'docker pull ${IMAGE_URI}',
               'echo \"Stopping old container...\"',

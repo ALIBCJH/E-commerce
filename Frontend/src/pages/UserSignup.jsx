@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import axios from "axios";
-import { useTheme } from "../context/ThemeContext"; // Make sure this exists if using dark mode
+import { useTheme } from "../context/ThemeContext";
+import { API_URL } from "../api/config";
 
 const UserSignup = () => {
   const [formData, setFormData] = useState({
@@ -40,7 +40,7 @@ const UserSignup = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:5000/api/users/signup", {
+      await axios.post(`${API_URL}/api/users/signup`, {
         name,
         email,
         password,
@@ -62,10 +62,7 @@ const UserSignup = () => {
         darkMode ? "bg-gray-900 text-white" : "bg-gray-100 text-black"
       }`}
     >
-      <motion.div
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.4 }}
+      <div
         className={`w-full max-w-md rounded-2xl p-8 shadow-lg ${
           darkMode ? "bg-gray-800" : "bg-white"
         }`}
@@ -131,7 +128,7 @@ const UserSignup = () => {
             </span>
           </p>
         </form>
-      </motion.div>
+      </div>
     </div>
   );
 };

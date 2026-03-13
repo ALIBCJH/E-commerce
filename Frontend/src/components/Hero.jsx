@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { FaHeart, FaBars, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { motion } from "framer-motion";
 import { API_URL } from "../api/config";
 
 const categories = [
@@ -108,14 +107,9 @@ const Hero = () => {
       <main className="flex-1 flex flex-col items-center">
         {/* Title */}
         <div className="w-full max-w-7xl text-center mb-4">
-          <motion.h1
-            className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-red-500 to-yellow-500 dark:from-orange-300 dark:to-yellow-300"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
+          <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-red-500 to-yellow-500 dark:from-orange-300 dark:to-yellow-300">
             Chuo Market
-          </motion.h1>
+          </h1>
           <p className="mt-2 text-gray-700 dark:text-gray-300">
             {selectedCategory === "All"
               ? "Discover our curated selection of Products from top local vendors."
@@ -124,28 +118,11 @@ const Hero = () => {
         </div>
 
         {/* Products Grid */}
-        <motion.div
-          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-10 w-full max-w-7xl"
-          initial="hidden"
-          animate="visible"
-          variants={{
-            hidden: { opacity: 0, y: 30 },
-            visible: {
-              opacity: 1,
-              y: 0,
-              transition: { staggerChildren: 0.15 },
-            },
-          }}
-        >
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-10 w-full max-w-7xl">
           {products.map((product) => (
-            <motion.div
+            <div
               key={product._id}
               className="relative bg-white dark:bg-gray-800 rounded-3xl shadow-xl overflow-hidden group hover:shadow-2xl transform transition-transform hover:scale-105"
-              whileHover={{ scale: 1.03 }}
-              variants={{
-                hidden: { opacity: 0, y: 20 },
-                visible: { opacity: 1, y: 0 },
-              }}
             >
               <span className="absolute top-3 right-3 bg-orange-500 text-white text-xs px-3 py-1 rounded-full shadow-md">
                 NEW
@@ -182,9 +159,9 @@ const Hero = () => {
                   <FaHeart className="text-pink-500" />
                 </button>
               </div>
-            </motion.div>
+            </div>
           ))}
-        </motion.div>
+        </div>
       </main>
     </section>
   );
