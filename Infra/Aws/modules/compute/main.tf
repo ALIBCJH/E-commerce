@@ -18,6 +18,11 @@ data "aws_ami" "amazon_linux_2023" {
 resource "aws_key_pair" "main" {
   key_name   = "${var.project_name}-key"
   public_key = var.ssh_public_key
+
+  lifecycle {
+    # Prevent recreation if it already exists
+    ignore_changes = [public_key]
+  }
 }
 
 # Frontend EC2 Instance (Public Subnet)

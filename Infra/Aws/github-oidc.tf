@@ -18,6 +18,11 @@ resource "aws_iam_openid_connect_provider" "github" {
     Environment = "production"
     ManagedBy   = "terraform"
   }
+
+  lifecycle {
+    # Prevent recreation if it already exists
+    ignore_changes = [thumbprint_list]
+  }
 }
 
 output "github_oidc_provider_arn" {
