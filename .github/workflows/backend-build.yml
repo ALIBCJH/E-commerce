@@ -81,7 +81,7 @@ jobs:
 
           if [ -z "$ROLE_ARN" ]; then
             echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
-            echo "::error::Run terraform apply in Infra/Aws and set AWS_DEPLOY_ROLE_ARN"
+            echo "::error::Run terraform apply in Infra/Aws and set AWS_DEPLOY_ROLE_ARN to github_actions_deploy_role_arn"
             exit 1
           fi
 

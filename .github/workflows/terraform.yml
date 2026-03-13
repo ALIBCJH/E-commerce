@@ -27,6 +27,7 @@ env:
   AWS_REGION: us-east-1
   TERRAFORM_VERSION: 1.5.0
   WORKING_DIR: ./Infra/Aws
+  DEFAULT_AWS_TERRAFORM_ROLE_ARN: arn:aws:iam::457713535842:role/ecommerce-github-actions-terraform-role
   DEFAULT_AWS_DEPLOY_ROLE_ARN: arn:aws:iam::457713535842:role/ecommerce-github-actions-ssm-role
 
 permissions:
@@ -64,24 +65,40 @@ jobs:
 
       - name: Validate AWS role repository variable
         run: |
-          if [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ] && [ -z "${{ secrets.AWS_DEPLOY_ROLE_ARN }}" ]; then
-            echo "::warning::AWS_DEPLOY_ROLE_ARN is not set in repository variables/secrets"
-            echo "::warning::Using workflow fallback role ARN from Terraform output: ${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
+          if [ -z "${{ vars.AWS_TERRAFORM_ROLE_ARN }}" ] && [ -z "${{ secrets.AWS_TERRAFORM_ROLE_ARN }}" ]; then
+            echo "::warning::AWS_TERRAFORM_ROLE_ARN is not set in repository variables/secrets"
+            echo "::warning::Terraform workflow will use fallback role ARN: ${{ env.DEFAULT_AWS_TERRAFORM_ROLE_ARN }}"
           fi
 
       - name: Resolve AWS role ARN
         id: aws-role
         run: |
-          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          ROLE_ARN="${{ vars.AWS_TERRAFORM_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ env.DEFAULT_AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          fi
           if [ -z "$ROLE_ARN" ]; then
             ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
           fi
           if [ -z "$ROLE_ARN" ]; then
+            echo "::warning::Falling back to deploy role during Terraform role transition"
             ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
           fi
 
           if [ -z "$ROLE_ARN" ]; then
-            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
+            echo "::error::Missing AWS_TERRAFORM_ROLE_ARN and AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
+            exit 1
+          fi
+
+          if echo "$ROLE_ARN" | grep -q "github-actions-ssm-role"; then
+            echo "::error::Terraform workflow is using the deploy role: $ROLE_ARN"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
             exit 1
           fi
 
@@ -119,7 +136,6 @@ jobs:
         id: plan
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: terraform plan -no-color -input=false
-        continue-on-error: true
 
       - name: Comment PR with Plan
         if: github.event_name == 'pull_request'
@@ -157,10 +173,6 @@ jobs:
               body: output
             })
 
-      - name: Check Plan Status
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
-
   terraform-apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
@@ -184,17 +196,33 @@ jobs:
       - name: Resolve AWS role ARN
         id: aws-role
         run: |
-          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          ROLE_ARN="${{ vars.AWS_TERRAFORM_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ env.DEFAULT_AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          fi
           if [ -z "$ROLE_ARN" ]; then
             ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
           fi
           if [ -z "$ROLE_ARN" ]; then
+            echo "::warning::Falling back to deploy role during Terraform role transition"
             ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
           fi
 
           if [ -z "$ROLE_ARN" ]; then
-            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
-            echo "::error::Set it to terraform output -raw github_actions_role_arn"
+            echo "::error::Missing AWS_TERRAFORM_ROLE_ARN and AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
+            exit 1
+          fi
+
+          if echo "$ROLE_ARN" | grep -q "github-actions-ssm-role"; then
+            echo "::error::Terraform apply cannot use deploy role: $ROLE_ARN"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
             exit 1
           fi
 
@@ -223,8 +251,10 @@ jobs:
       - name: Output Infrastructure Info
         run: |
           echo "::notice::Terraform infrastructure updated successfully"
-          ROLE_ARN=$(terraform output -raw github_actions_role_arn)
-          echo "::notice::Set repository variable AWS_DEPLOY_ROLE_ARN to: ${ROLE_ARN}"
+          TERRAFORM_ROLE_ARN=$(terraform output -raw github_actions_terraform_role_arn)
+          DEPLOY_ROLE_ARN=$(terraform output -raw github_actions_deploy_role_arn)
+          echo "::notice::Set repository variable AWS_TERRAFORM_ROLE_ARN to: ${TERRAFORM_ROLE_ARN}"
+          echo "::notice::Set repository variable AWS_DEPLOY_ROLE_ARN to: ${DEPLOY_ROLE_ARN}"
           terraform output -json > terraform-outputs.json
           
       - name: Upload Terraform Outputs
@@ -256,17 +286,33 @@ jobs:
       - name: Resolve AWS role ARN
         id: aws-role
         run: |
-          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          ROLE_ARN="${{ vars.AWS_TERRAFORM_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ env.DEFAULT_AWS_TERRAFORM_ROLE_ARN }}"
+          fi
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          fi
           if [ -z "$ROLE_ARN" ]; then
             ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
           fi
           if [ -z "$ROLE_ARN" ]; then
+            echo "::warning::Falling back to deploy role during Terraform role transition"
             ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
           fi
 
           if [ -z "$ROLE_ARN" ]; then
-            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
-            echo "::error::Set it to terraform output -raw github_actions_role_arn"
+            echo "::error::Missing AWS_TERRAFORM_ROLE_ARN and AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
+            exit 1
+          fi
+
+          if echo "$ROLE_ARN" | grep -q "github-actions-ssm-role"; then
+            echo "::error::Manual Terraform action cannot use deploy role: $ROLE_ARN"
+            echo "::error::Set AWS_TERRAFORM_ROLE_ARN to terraform output -raw github_actions_terraform_role_arn"
             exit 1
           fi
 
