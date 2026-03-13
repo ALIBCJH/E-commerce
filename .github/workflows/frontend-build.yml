@@ -17,14 +17,13 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REPOSITORY: ecommerce-frontend
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/ecommerce-frontend
   IMAGE_TAG: ${{ github.sha }}
-  DEFAULT_AWS_DEPLOY_ROLE_ARN: arn:aws:iam::457713535842:role/ecommerce-github-actions-ssm-role
 
 permissions:
-  id-token: write
   contents: read
+  packages: write
 
 jobs:
   test-frontend:
@@ -64,50 +63,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Resolve AWS role ARN
-        id: aws-role
-        run: |
-          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
-          if [ -z "$ROLE_ARN" ]; then
-            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
-          fi
-          if [ -z "$ROLE_ARN" ]; then
-            ROLE_ARN="${{ env.DEFAULT_AWS_DEPLOY_ROLE_ARN }}"
-          fi
-
-          if [ -z "$ROLE_ARN" ]; then
-            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets and no fallback is available"
-            echo "::error::Run terraform apply in Infra/Aws and set AWS_DEPLOY_ROLE_ARN to github_actions_deploy_role_arn"
-            exit 1
-          fi
-
-          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
-            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
-            exit 1
-          fi
-
-          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Verify OIDC role assumption
-        run: |
-          ASSUMED_ARN=$(aws sts get-caller-identity --query 'Arn' --output text)
-          echo "::notice::Authenticated to AWS as ${ASSUMED_ARN}"
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -130,9 +97,3 @@ jobs:
         run: |
           echo "Image pushed with tags:"
           echo "${{ steps.meta.outputs.tags }}"
-          
-      - name: Update deployment info
-        run: |
-          echo "Frontend image built and pushed successfully"
-          echo "Repository: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
-          echo "Tag: ${{ env.IMAGE_TAG }}"
