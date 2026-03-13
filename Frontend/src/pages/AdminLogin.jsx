@@ -14,7 +14,7 @@ const AdminLogin = ({ onLogin }) => {
     setMessage("");
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
-
+// Hadnle LOgin
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!formData.email || !formData.password) {
