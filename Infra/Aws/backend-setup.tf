@@ -54,19 +54,17 @@ output "s3_bucket_name" {
 output "backend_config" {
   description = "Backend configuration instructions"
   value       = <<-EOT
-    S3 Backend Configuration:
+    S3 Backend Configuration (without locking):
     
     Bucket: ${aws_s3_bucket.terraform_state.id}
-    DynamoDB Table: ${aws_dynamodb_table.terraform_locks.id}
     
-    The S3 bucket and DynamoDB table have been created.
+    The S3 bucket has been created.
     Backend is already configured in providers.tf.
     
     To migrate your local state to S3:
     1. Run: terraform init -migrate-state
     2. Confirm the migration when prompted
     
-    Note: DynamoDB is used for state locking until Terraform adds
-    support for S3 native conditional writes.
+    WARNING: State locking is disabled. Only run Terraform from one location at a time.
   EOT
 }
