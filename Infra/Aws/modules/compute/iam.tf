@@ -18,6 +18,11 @@ resource "aws_iam_role" "ec2_ssm_role" {
   tags = {
     Name = "${var.project_name}-ec2-ssm-role"
   }
+
+  lifecycle {
+    # Prevent recreation if it already exists
+    ignore_changes = [assume_role_policy]
+  }
 }
 
 # Attach AWS managed policy for SSM
