@@ -32,5 +32,6 @@ resource "aws_secretsmanager_secret_version" "db_password" {
 # Local variables for SSH key
 locals {
   # Dynamically load SSH public key from file, or use provided variable
-  ssh_public_key = var.ssh_public_key != "" ? var.ssh_public_key : file(pathexpand("~/.ssh/id_ed25519.pub"))
+  # Use try() to handle cases where the file doesn't exist (e.g., in CI/CD)
+  ssh_public_key = var.ssh_public_key != "" ? var.ssh_public_key : try(file(pathexpand("~/.ssh/id_ed25519.pub")), "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderKeyForCICD placeholder@github-actions")
 }
