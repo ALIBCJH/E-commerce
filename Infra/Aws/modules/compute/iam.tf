@@ -48,7 +48,15 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   }
 }
 
-# IAM Role for GitHub Actions to execute SSM commands
+locals {
+  github_actions_oidc_subjects = [
+    "repo:${var.github_repo}:ref:refs/heads/*",
+    "repo:${var.github_repo}:pull_request",
+    "repo:${var.github_repo}:environment:*"
+  ]
+}
+
+# IAM Role for GitHub Actions build/deploy operations (ECR + SSM)
 resource "aws_iam_role" "github_actions_ssm_role" {
   name = "${var.project_name}-github-actions-ssm-role"
 
@@ -63,11 +71,7 @@ resource "aws_iam_role" "github_actions_ssm_role" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = [
-              "repo:${var.github_repo}:ref:refs/heads/*",
-              "repo:${var.github_repo}:pull_request",
-              "repo:${var.github_repo}:environment:*"
-            ]
+            "token.actions.githubusercontent.com:sub" = local.github_actions_oidc_subjects
           }
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
@@ -104,7 +108,8 @@ resource "aws_iam_role_policy" "github_actions_policy" {
         Effect = "Allow"
         Action = [
           "ec2:DescribeInstances",
-          "ec2:DescribeTags"
+          "ec2:DescribeTags",
+          "ec2:DescribeInstanceStatus"
         ]
         Resource = "*"
       },
@@ -119,6 +124,68 @@ resource "aws_iam_role_policy" "github_actions_policy" {
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sts:GetCallerIdentity"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# IAM Role for GitHub Actions Terraform infrastructure operations
+resource "aws_iam_role" "github_actions_terraform_role" {
+  name = "${var.project_name}-github-actions-terraform-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringLike = {
+            "token.actions.githubusercontent.com:sub" = local.github_actions_oidc_subjects
+          }
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.project_name}-github-actions-terraform-role"
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_terraform_policy" {
+  name = "${var.project_name}-github-actions-terraform-policy"
+  role = aws_iam_role.github_actions_terraform_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:*",
+          "elasticloadbalancing:*",
+          "iam:*",
+          "s3:*",
+          "secretsmanager:*",
+          "ssm:*",
+          "ecr:*",
+          "sts:GetCallerIdentity"
         ]
         Resource = "*"
       }
