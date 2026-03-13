@@ -7,6 +7,8 @@ on:
       - '**'
     paths:
       - 'terraform/**'
+      - '*.tf'
+      - '**/*.tf'
       - 'Infra/Aws/**'
       - '.github/workflows/terraform.yml'
   workflow_dispatch:
@@ -61,10 +63,30 @@ jobs:
 
       - name: Validate AWS role repository variable
         run: |
-          if [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ]; then
+          if [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ] && [ -z "${{ secrets.AWS_DEPLOY_ROLE_ARN }}" ]; then
             echo "::warning::AWS_DEPLOY_ROLE_ARN is not set in repository variables"
-            echo "::warning::After terraform apply, run: terraform output -raw github_actions_role_arn and set it as AWS_DEPLOY_ROLE_ARN"
+            echo "::warning::After terraform apply, run: terraform output -raw github_actions_role_arn and set it as AWS_DEPLOY_ROLE_ARN (variable or secret)"
           fi
+
+      - name: Resolve AWS role ARN
+        id: aws-role
+        run: |
+          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets"
+            exit 1
+          fi
+
+          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
+            exit 1
+          fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
 
       - name: Terraform Format Check
         id: fmt
@@ -74,7 +96,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify OIDC role assumption
@@ -155,23 +177,31 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Validate AWS role from Terraform output
+      - name: Resolve AWS role ARN
+        id: aws-role
         run: |
-          if [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ]; then
-            echo "::error::Missing repository variable AWS_DEPLOY_ROLE_ARN"
-            echo "::error::Set it to the value of terraform output -raw github_actions_role_arn"
+          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets"
+            echo "::error::Set it to terraform output -raw github_actions_role_arn"
             exit 1
           fi
 
-          if ! echo "${{ vars.AWS_DEPLOY_ROLE_ARN }}" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
-            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: ${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
             exit 1
           fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify OIDC role assumption
@@ -216,23 +246,31 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Validate AWS role from Terraform output
+      - name: Resolve AWS role ARN
+        id: aws-role
         run: |
-          if [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ]; then
-            echo "::error::Missing repository variable AWS_DEPLOY_ROLE_ARN"
-            echo "::error::Set it to the value of terraform output -raw github_actions_role_arn"
+          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets"
+            echo "::error::Set it to terraform output -raw github_actions_role_arn"
             exit 1
           fi
 
-          if ! echo "${{ vars.AWS_DEPLOY_ROLE_ARN }}" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
-            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: ${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
             exit 1
           fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify OIDC role assumption

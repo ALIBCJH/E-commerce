@@ -26,9 +26,35 @@ permissions:
   contents: read
 
 jobs:
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./Frontend
+        run: npm ci
+
+      - name: Run frontend quality checks
+        working-directory: ./Frontend
+        run: |
+          npm run lint
+          npm run build
+
   build-and-push:
     name: Build and Push Frontend Image
     runs-on: ubuntu-latest
+    needs: test-frontend
+    if: github.event_name != 'pull_request'
     
     steps:
       - name: Checkout code
@@ -37,23 +63,31 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Validate AWS role from Terraform output
+      - name: Resolve AWS role ARN
+        id: aws-role
         run: |
-          if [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ]; then
-            echo "::error::Missing repository variable AWS_DEPLOY_ROLE_ARN"
-            echo "::error::Run terraform apply in Infra/Aws and set AWS_DEPLOY_ROLE_ARN to terraform output -raw github_actions_role_arn"
+          ROLE_ARN="${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          if [ -z "$ROLE_ARN" ]; then
+            ROLE_ARN="${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
+          fi
+
+          if [ -z "$ROLE_ARN" ]; then
+            echo "::error::Missing AWS_DEPLOY_ROLE_ARN in repository variables/secrets"
+            echo "::error::Run terraform apply in Infra/Aws and set AWS_DEPLOY_ROLE_ARN"
             exit 1
           fi
 
-          if ! echo "${{ vars.AWS_DEPLOY_ROLE_ARN }}" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
-            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: ${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          if ! echo "$ROLE_ARN" | grep -Eq '^arn:aws:iam::[0-9]{12}:role/.+'; then
+            echo "::error::Invalid AWS_DEPLOY_ROLE_ARN format: $ROLE_ARN"
             exit 1
           fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}  # Set this as a GitHub repository variable
+          role-to-assume: ${{ steps.aws-role.outputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify OIDC role assumption
