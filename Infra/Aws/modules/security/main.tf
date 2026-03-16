@@ -92,26 +92,26 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
-# 5. Network ACL (Stateless) - Implementing your Ephemeral Port logic
+# 5. Network ACL (Stateless) for public subnets
 resource "aws_network_acl" "public_nacl" {
   vpc_id     = var.vpc_id
   subnet_ids = var.public_subnet_ids
 
   ingress {
-    protocol   = "tcp"
+    protocol   = "-1"
     rule_no    = 100
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 80
-    to_port    = 80
+    from_port  = 0
+    to_port    = 0
   }
 
   egress {
-    protocol   = "tcp"
+    protocol   = "-1"
     rule_no    = 100
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535 # Ephemeral ports for the return trip!
+    from_port  = 0
+    to_port    = 0
   }
 }
