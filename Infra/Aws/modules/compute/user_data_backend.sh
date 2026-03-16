@@ -2,15 +2,22 @@
 # User data script for backend EC2 instance
 set -e
 
+# Start SSM agent as early as possible for faster registration
+systemctl enable amazon-ssm-agent || true
+systemctl start amazon-ssm-agent || true
+if ! systemctl is-active --quiet amazon-ssm-agent; then
+	yum install -y amazon-ssm-agent
+	systemctl enable amazon-ssm-agent
+	systemctl start amazon-ssm-agent
+fi
+
 # Update system
 yum update -y
 
-# Install Docker and SSM Agent
-yum install -y docker amazon-ssm-agent
+# Install Docker
+yum install -y docker
 systemctl start docker
 systemctl enable docker
-systemctl start amazon-ssm-agent
-systemctl enable amazon-ssm-agent
 usermod -a -G docker ec2-user
 
 # Install MongoDB (Community Edition)
