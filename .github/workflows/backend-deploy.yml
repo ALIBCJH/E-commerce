@@ -121,7 +121,8 @@ jobs:
         id: deploy-ssm
         run: |
           IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
-          IMAGE_URI="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_URI="${{ env.REGISTRY }}/${OWNER_LOWER}/ecommerce-backend:${IMAGE_TAG}"
           
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.get-instance.outputs.instance_id }}" \
