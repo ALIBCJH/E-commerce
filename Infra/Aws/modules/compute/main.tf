@@ -36,12 +36,20 @@ resource "aws_instance" "frontend" {
 
   user_data = <<-EOF
               #!/bin/bash
+              set -euxo pipefail
+
+              systemctl enable amazon-ssm-agent || true
+              systemctl start amazon-ssm-agent || true
+              if ! systemctl is-active --quiet amazon-ssm-agent; then
+                yum install -y amazon-ssm-agent
+                systemctl enable amazon-ssm-agent
+                systemctl start amazon-ssm-agent
+              fi
+
               yum update -y
-              yum install -y docker amazon-ssm-agent
+              yum install -y docker
               systemctl start docker
               systemctl enable docker
-              systemctl start amazon-ssm-agent
-              systemctl enable amazon-ssm-agent
               usermod -a -G docker ec2-user
               # Pull and run frontend container
               docker pull nginx:latest

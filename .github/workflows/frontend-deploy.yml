@@ -76,6 +76,13 @@ jobs:
                       "Name=instance-state-name,Values=running" \
             --query 'Reservations[0].Instances[0].InstanceId' \
             --output text)
+
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ] || [ "$INSTANCE_ID" = "null" ]; then
+            echo "::error::No running frontend instance found with tag Name=ecommerce-frontend"
+            echo "::error::Check EC2 tags/state and ensure Terraform outputs match workflow filters"
+            exit 1
+          fi
+
           echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
           echo "Frontend Instance ID: $INSTANCE_ID"
 
@@ -83,14 +90,20 @@ jobs:
         run: |
           echo "Waiting for SSM agent to be online..."
           for i in {1..30}; do
-            if aws ssm describe-instance-information \
+            STATUS=$(aws ssm describe-instance-information \
               --filters "Key=InstanceIds,Values=${{ steps.get-instance.outputs.instance_id }}" \
               --query 'InstanceInformationList[0].PingStatus' \
-              --output text | grep -q "Online"; then
+              --output text)
+
+            if [ "$STATUS" = "Online" ]; then
               echo "SSM agent is online"
               exit 0
             fi
-            echo "Waiting... ($i/30)"
+            if [ "$STATUS" = "None" ] || [ "$STATUS" = "null" ] || [ -z "$STATUS" ]; then
+              echo "Waiting... ($i/30) - instance not yet registered with SSM"
+            else
+              echo "Waiting... ($i/30) - PingStatus=$STATUS"
+            fi
             sleep 10
           done
           echo "SSM agent did not come online in time"
