@@ -74,7 +74,7 @@ resource "aws_security_group" "backend_sg" {
   egress {
     from_port   = 0
     to_port     = 0
-    protocol    = "-1"
+    protocol    = "-1" #Allow the necessary outbound traffic (e.g., to the internet for updates, or to the DB)
     cidr_blocks = ["0.0.0.0/0"]
   }
 }

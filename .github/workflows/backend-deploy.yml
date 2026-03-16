@@ -90,8 +90,19 @@ jobs:
       - name: Wait for SSM Agent
         run: |
           echo "Waiting for SSM agent to be online..."
-          aws ssm wait instance-information-available \
-            --instance-id ${{ steps.get-instance.outputs.instance_id }}
+          for i in {1..30}; do
+            if aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=${{ steps.get-instance.outputs.instance_id }}" \
+              --query 'InstanceInformationList[0].PingStatus' \
+              --output text | grep -q "Online"; then
+              echo "SSM agent is online"
+              exit 0
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 10
+          done
+          echo "SSM agent did not come online in time"
+          exit 1
 
       - name: Deploy Container via SSM
         id: deploy-ssm
