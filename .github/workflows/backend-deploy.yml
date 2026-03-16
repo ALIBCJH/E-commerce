@@ -57,14 +57,6 @@ jobs:
 
           echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
 
-      - name: Validate MongoDB Atlas URI secret
-        run: |
-          if [ -z "${{ secrets.MONGODB_URI }}" ]; then
-            echo "::error::Missing repository secret MONGODB_URI"
-            echo "::error::Set MONGODB_URI to your MongoDB Atlas connection string"
-            exit 1
-          fi
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -123,6 +115,11 @@ jobs:
           IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
           OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           IMAGE_URI="${{ env.REGISTRY }}/${OWNER_LOWER}/ecommerce-backend:${IMAGE_TAG}"
+          MONGO_URI_VALUE="${{ secrets.MONGODB_URI }}"
+          if [ -z "$MONGO_URI_VALUE" ]; then
+            MONGO_URI_VALUE="mongodb://localhost:27017/ecommerce"
+            echo "::notice::MONGODB_URI secret not set; using local MongoDB fallback"
+          fi
           
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.get-instance.outputs.instance_id }}" \
@@ -138,7 +135,7 @@ jobs:
               'docker stop ecommerce-backend || true',
               'docker rm ecommerce-backend || true',
               'echo \"Starting new container...\"',
-              'docker run -d --name ecommerce-backend --restart unless-stopped -p 3000:3000 -e MONGODB_URI=${{ secrets.MONGODB_URI }} -e NODE_ENV=production ${IMAGE_URI}',
+              'docker run -d --name ecommerce-backend --restart unless-stopped -p 3000:3000 -e MONGO_URI=${MONGO_URI_VALUE} -e NODE_ENV=production ${IMAGE_URI}',
               'echo \"Deployment complete!\"',
               'docker ps | grep ecommerce-backend'
             ]" \

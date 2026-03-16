@@ -2,9 +2,10 @@ import mongoose from 'mongoose';
 
 export const connectDB = async ()=> {
     try{
-        console.log('Connecting to MongoDB with URI:', process.env.MONGO_URI.replace(/\/\/.*:.*@/, '//<credentials>@'));
+        const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/ecommerce';
+        console.log('Connecting to MongoDB with URI:', mongoUri.replace(/\/\/.*:.*@/, '//<credentials>@'));
         
-        const conn = await mongoose.connect(process.env.MONGO_URI, {
+        const conn = await mongoose.connect(mongoUri, {
             serverSelectionTimeoutMS: 30000, // Increase timeout to 30s
             socketTimeoutMS: 45000,
             family: 4, // Use IPv4, skip trying IPv6
